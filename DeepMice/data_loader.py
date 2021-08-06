@@ -33,7 +33,7 @@ def get_trial_matrix_3d(activity, neuron_time, stimulus_details,
   """
 
   nr_trials = len( stimulus_details ) - 1
-  nr_frames = 10
+  nr_frames = nr_frames_after
   nr_neurons = activity.shape[0]
 
   trial_matrix_3d = np.zeros( (nr_trials, nr_neurons, nr_frames))
