@@ -1,3 +1,7 @@
+
+# Standard library imports
+from pathlib import Path
+# Third party library imports
 import numpy as np
 
 
@@ -9,10 +13,10 @@ def load_example_data(path='one_example_session.npy', print_keys=True):
     data: dict ()
   """
 
-  data = np.load('one_example_session.npy', allow_pickle=True).item()
+  data = np.load(path, allow_pickle=True).item()
 
   if print_keys:
-    print('Keys in the data dictionary:\n', data.keys() )
+    print('Keys in the data dictionary:\n', data.keys())
 
   return data
 
