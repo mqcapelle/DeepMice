@@ -6,3 +6,4 @@
 Database
 *.egg-info
 *.ipynb_checkpoints
+*.npy
