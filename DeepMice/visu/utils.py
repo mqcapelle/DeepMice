@@ -1,8 +1,29 @@
 import os
 import os.path as op
+import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+
+def plot_traces_above(time, traces, axis=None, key=None, spacing=0.5, linewidth=0.5, alpha=1):
+    """Plot calcium traces on top of each other with white area below
+    Adrian 2020-08-03 """
+
+    if axis is None:
+        plt.figure(figsize=(9, 7))
+    else:
+        plt.sca(axis)
+
+    for i, trace in enumerate( traces ):
+
+        plt.plot(time, trace + spacing*i, lw=linewidth, zorder=500-i, color='C0')
+        plt.fill_between(time, trace + spacing*i, 0, color = 'white', zorder=500-i, alpha=alpha)
+
+    plt.xlabel('Time [s]')
+    plt.xlim(left=-1)
+    plt.ylim(bottom=-1)
+
+    return axis
 
 def events_to_timeseries(events, precision=2):
     events = np.array(events)

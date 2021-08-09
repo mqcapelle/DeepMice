@@ -5,6 +5,30 @@ from pathlib import Path
 import numpy as np
 
 
+import os
+import os.path as op
+import requests
+
+
+def download_data(fdir=None):
+
+    # TODO: rewrite this function to download data from OUR drive
+    url = 'https://ndownloader.figshare.com/files/28470255'
+    r = requests.get(url, allow_redirects=True)
+
+    if fdir is None:
+        fdir = os.getcwd()
+    assert isinstance(fdir, str)
+
+    filename = "allen_visual_behavior_2p_change_detection_" \
+               "familiar_novel_image_sets.parquet"
+    # data = pd.read_parquet(filename)
+
+    print('Downloading...')
+    open(op.join(fdir, filename), 'wb').write(r.content)
+    print('Done!\nSaved at {0}'.format(op.join(fdir, filename)))
+
+
 def load_example_data(path='one_example_session.npy', print_keys=True):
   """ Example function to load the exported data
   Input:
