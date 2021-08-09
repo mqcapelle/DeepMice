@@ -22,6 +22,8 @@ def get_time_series(file):
 
     if isinstance(file, str):
         data = np.load(file, allow_pickle=True).item()
+    elif isinstance(file, np.ndarray):
+        data = file.item()
     elif isinstance(file, dict):
         data = file
     print('Keys of data dictionary:\n', data.keys())
