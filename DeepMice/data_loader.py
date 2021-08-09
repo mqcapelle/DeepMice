@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def load_example_data(path='one_example_session.npy', print_keys=True):
   """ Example function to load the exported data
   Input:
