@@ -1,18 +1,18 @@
-
 # Standard library imports
 from pathlib import Path
-# Third party library imports
-import numpy as np
-
-
 import os
-import os.path as op
 import requests
 
+# Third party library imports
+import numpy as np
+import xarray as xr
+import torch
+from torch.utils.data import DataLoader, TensorDataset
 
 def download_data(fdir=None):
-
     # TODO: rewrite this function to download data from OUR drive
+    raise Exception("Code not implemented yet!")
+
     url = 'https://ndownloader.figshare.com/files/28470255'
     r = requests.get(url, allow_redirects=True)
 
@@ -29,50 +29,168 @@ def download_data(fdir=None):
     print('Done!\nSaved at {0}'.format(op.join(fdir, filename)))
 
 
-def load_example_data(path='one_example_session.npy', print_keys=True):
-  """ Example function to load the exported data
+def load_one_session(path='046_excSession_v1_ophys_971632311.nc'):
+  """ Load one session from file
+
   Input:
     path: str (path to the downloaded file)
   Output:
-    data: dict ()
+    data: xarray with data for one session
   """
-
-  data = np.load(path, allow_pickle=True).item()
-
-  if print_keys:
-    print('Keys in the data dictionary:\n', data.keys())
-
+  data = xr.open_dataset(path)
   return data
 
 
-def get_trial_matrix_3d(activity, neuron_time, stimulus_details,
-                        nr_frames_after=10):
+def get_trial_matrix_3d(data, nr_frames_after=10,
+                        output='image_index'):
   """Calculate 3D trial matrix (trials,neurons,time) from loaded data
   Input:
-    activity: 2d matrix (neurons, time)
-    neuron_time: 1d matrix (time)
-    stimulus_details: pandas dataframe (as loaded from one_example_session.npy)
+    data: xarray for one session
+    nr_frames_after: int   (frames to extract after trial onset)
+    output: str   (description of the type of variable)
+          Supported choices: image_index, is_change, rewarded
+
   Output:
     trial_matrix_3d: (trials, neurons, time)
-    image_idx: (trials) Image number that is shown (8 for omitted)
+    y: 1d array (trials) 
   """
-
-  nr_trials = len( stimulus_details ) - 1
+  # use descriptive variables for the dimensions
+  nr_trials = len( data.trial )
   nr_frames = nr_frames_after
-  nr_neurons = activity.shape[0]
+  nr_neurons = data.activity.shape[0]
 
   trial_matrix_3d = np.zeros( (nr_trials, nr_neurons, nr_frames))
-  image_index = np.zeros( nr_trials )
-  is_change = np.zeros(nr_trials)
+  y = np.zeros( nr_trials )
 
   for i in range(nr_trials):
-    stim_row = stimulus_details.iloc[i+1]  # skip first entry
-    start_time = stim_row.start_time
+    # extract the neural activity 
+    start_idx = int( data.start_frame[i] )   # frame of trial start
+    trial_matrix_3d[i,:,:] = data.activity.data[:,start_idx:start_idx+nr_frames]
 
-    start_idx = np.argmin( np.abs( neuron_time - start_time))
-    trial_matrix_3d[i,:,:] = activity[:,start_idx:start_idx+nr_frames]
+    # select the predictor that should be used
+    if output == 'image_index':
+      y[i] = data.image_index[i]
+    elif output == 'is_change':
+      y[i] = data.is_change[i]
+    elif output == 'rewarded':
+      y[i] = data.rewarded[i]
+    else:
+      raise Exception('Argument for output="{}" not supported.'.format(output))
+  
+  return trial_matrix_3d, y
 
-    image_index[i] = stim_row.image_index
-    is_change[i] = stim_row.is_change
 
-  return trial_matrix_3d, image_index, is_change
+
+def get_train_test_mask(nr_trials, split_type='block_middle',
+                        ratio=0.2, seed=483982):
+  """ Return two masks with True/False to select train and test trials
+
+  """
+  # split data into train and test set
+  
+  test_mask = np.zeros( nr_trials ) > 0   # all False
+
+  if split_type == 'block_middle':
+    test_mask[int((0.5-ratio/2)*nr_trials):int((0.5+ratio/2)*nr_trials)] = True
+  elif split_type == 'random':
+    test_mask[0:int(ratio*nr_trials)] = True
+    np.random.seed(seed)
+    test_mask = np.random.permutation(test_mask)
+  else:
+    raise Exception('Split type "{}" not implemented'.format(split_type))
+
+  train_mask = (test_mask == False)    # invert mask
+
+  return train_mask, test_mask
+
+
+def get_train_test_loader(X, y, train_mask, test_mask,
+                           batch_size=128, seed=7987542):
+  """Get train and test loaders 
+  
+  Input:
+    X: (nr_trials, ...)
+    y: (nr_trials)
+    train_mask: (nr_trials)   boolean array with True for train trials
+    test_mask: (nr_trials)    like train_mask, but for test set
+    
+  Output:
+    train_loader
+    test_loader
+  """
+
+  # initialize loaders
+  batch_size = 128
+  g_seed = torch.Generator()
+  g_seed.manual_seed(seed)
+
+  train_data = TensorDataset(torch.from_numpy(X[train_mask]), torch.from_numpy(y[train_mask]))
+  train_loader = DataLoader(train_data,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              num_workers=0,
+                              worker_init_fn=seed,
+                              generator=g_seed)
+  
+  test_data = TensorDataset(torch.from_numpy(X[test_mask]), torch.from_numpy(y[test_mask]))
+  test_loader = DataLoader(test_data,
+                              batch_size=batch_size,
+                              shuffle=False,
+                              num_workers=0,
+                              worker_init_fn=seed,
+                              generator=g_seed)
+
+  return train_loader, test_loader 
+
+def easy_train_test_loader(data, batch_size=128, output='image_index',
+                           test_ratio=0.2, split_type='block_middle'):
+  """ Get train and test data loader from data xarray
+  
+  TODO: documentation, for now check called functions
+  """
+  # find out how many frames still belong to one trial (0.75 seconds)
+  nr_frames_after = int( data.attrs['frame_rate_Hz'] * 0.7 )
+
+  # get cut out pieces of activity in mat_3d for each trial
+  mat_3d, y = get_trial_matrix_3d(
+                    data=data,
+                    nr_frames_after=nr_frames_after,
+                    output=output )
+  # mat_3c (trials, neurons, time)
+  # average out time for now for compatibility across sampling rates
+  X = np.mean(mat_3d, axis=2)
+
+  # get masks with True/False for train/test trials
+  nr_trials = X.shape[0]
+  train_mask, test_mask = get_train_test_mask(nr_trials=nr_trials,
+                                              split_type = split_type,
+                                              ratio = test_ratio)
+
+  train_loader, test_loader = get_train_test_loader(
+        X=X, y=y, train_mask=train_mask, test_mask=test_mask)
+  
+  return train_loader, test_loader
+
+
+if __name__ == '__main__':
+
+    # example use of the data loader (assumes file to be in working directory)
+    path = '046_excSession_v1_ophys_971632311.nc'
+    if not os.path.isfile(path):
+      raise Exception('Example file "{}" is not in working directory.'.format(path))
+    data = load_one_session(path)
+
+    train_loader, test_loader = easy_train_test_loader( data=data,
+                                                   batch_size=128,
+                                                   output='image_index',
+                                                   test_ratio = 0.2,
+                                                   split_type = 'block_middle',
+                                                   )
+
+    X_batch, y_batch = next( iter(train_loader))
+    print('Data loaded successfully :)')
+    print('X shape:', X_batch.shape)
+    print('y shape:', y_batch.shape)
+
+
+

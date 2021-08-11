@@ -39,9 +39,14 @@ def events_to_timeseries(events, precision=2):
     return ts, tp
 
 
-def get_time_series(filename):
+def get_time_series(file):
 
-    data = np.load(filename, allow_pickle=True).item()
+    if isinstance(file, str):
+        data = np.load(file, allow_pickle=True).item()
+    elif isinstance(file, np.ndarray):
+        data = file.item()
+    elif isinstance(file, dict):
+        data = file
     print('Keys of data dictionary:\n', data.keys())
 
     neu_data = xr.DataArray(data['neuron_activity'],
