@@ -1,18 +1,17 @@
-
 # Standard library imports
 from pathlib import Path
+import os
+import requests
+
 # Third party library imports
 import numpy as np
-
-
-import os
-import os.path as op
-import requests
+import xarray as xr
 
 
 def download_data(fdir=None):
-
     # TODO: rewrite this function to download data from OUR drive
+    raise Exception("Code not implemented yet!")
+
     url = 'https://ndownloader.figshare.com/files/28470255'
     r = requests.get(url, allow_redirects=True)
 
@@ -29,50 +28,52 @@ def download_data(fdir=None):
     print('Done!\nSaved at {0}'.format(op.join(fdir, filename)))
 
 
-def load_example_data(path='one_example_session.npy', print_keys=True):
-  """ Example function to load the exported data
+def load_one_session(path='046_excSession_v1_ophys_971632311.nc'):
+  """ Load one session from file
+
   Input:
     path: str (path to the downloaded file)
   Output:
-    data: dict ()
+    data: xarray with data for one session
   """
-
-  data = np.load(path, allow_pickle=True).item()
-
-  if print_keys:
-    print('Keys in the data dictionary:\n', data.keys())
-
+  data = xr.open_dataset(path)
   return data
 
 
-def get_trial_matrix_3d(activity, neuron_time, stimulus_details,
-                        nr_frames_after=10):
+def get_trial_matrix_3d(data, nr_frames_after=10,
+                        output='image_index'):
   """Calculate 3D trial matrix (trials,neurons,time) from loaded data
   Input:
-    activity: 2d matrix (neurons, time)
-    neuron_time: 1d matrix (time)
-    stimulus_details: pandas dataframe (as loaded from one_example_session.npy)
+    data: xarray for one session
+    nr_frames_after: int   (frames to extract after trial onset)
+    output: str   (description of the type of variable)
+          Supported choices: image_index, is_change, rewarded
+
   Output:
     trial_matrix_3d: (trials, neurons, time)
-    image_idx: (trials) Image number that is shown (8 for omitted)
+    y: 1d array (trials) 
   """
-
-  nr_trials = len( stimulus_details ) - 1
+  # use descriptive variables for the dimensions
+  nr_trials = len( data.trial )
   nr_frames = nr_frames_after
-  nr_neurons = activity.shape[0]
+  nr_neurons = data.activity.shape[0]
 
   trial_matrix_3d = np.zeros( (nr_trials, nr_neurons, nr_frames))
-  image_index = np.zeros( nr_trials )
-  is_change = np.zeros(nr_trials)
+  y = np.zeros( nr_trials )
 
   for i in range(nr_trials):
-    stim_row = stimulus_details.iloc[i+1]  # skip first entry
-    start_time = stim_row.start_time
+    # extract the neural activity 
+    start_idx = int( data.start_frame[i] )   # frame of trial start
+    trial_matrix_3d[i,:,:] = data.activity.data[:,start_idx:start_idx+nr_frames]
 
-    start_idx = np.argmin( np.abs( neuron_time - start_time))
-    trial_matrix_3d[i,:,:] = activity[:,start_idx:start_idx+nr_frames]
-
-    image_index[i] = stim_row.image_index
-    is_change[i] = stim_row.is_change
-
-  return trial_matrix_3d, image_index, is_change
+    # select the predictor that should be used
+    if output == 'image_index':
+      y[i] = data.image_index[i]
+    elif output == 'is_change':
+      y[i] = data.is_change[i]
+    elif output == 'rewarded':
+      y[i] = data.rewarded[i]
+    else:
+      raise Exception('Argument for output="{}" not supported.'.format(output))
+  
+  return trial_matrix_3d, y
