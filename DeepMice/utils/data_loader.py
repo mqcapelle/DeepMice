@@ -42,7 +42,8 @@ def load_one_session(path='046_excSession_v1_ophys_971632311.nc'):
 
 
 def get_trial_matrix_3d(data, nr_frames_after=10,
-                        output='image_index'):
+                        output='image_index',
+                        include_time = False):
   """Calculate 3D trial matrix (trials,neurons,time) from loaded data
   Input:
     data: xarray for one session
@@ -60,13 +61,17 @@ def get_trial_matrix_3d(data, nr_frames_after=10,
   nr_neurons = data.activity.shape[0]
 
   trial_matrix_3d = np.zeros( (nr_trials, nr_neurons, nr_frames))
+  time = np.zeros( (nr_trials, nr_frames) )
   y = np.zeros( nr_trials )
-
+    
   for i in range(nr_trials):
     # extract the neural activity 
     start_idx = int( data.start_frame[i] )   # frame of trial start
     trial_matrix_3d[i,:,:] = data.activity.data[:,start_idx:start_idx+nr_frames]
 
+    # extract time
+    time[i,:] = data.activity.time[start_idx:start_idx+nr_frames]
+    
     # select the predictor that should be used
     if output == 'image_index':
       y[i] = data.image_index[i]
@@ -77,8 +82,10 @@ def get_trial_matrix_3d(data, nr_frames_after=10,
     else:
       raise Exception('Argument for output="{}" not supported.'.format(output))
   
-  return trial_matrix_3d, y
-
+  if not include_time:
+    return trial_matrix_3d, y
+  else:
+    return trial_matrix_3d, y, t
 
 
 def get_train_test_mask(nr_trials, split_type='block_middle',
@@ -142,7 +149,8 @@ def get_train_test_loader(X, y, train_mask, test_mask,
   return train_loader, test_loader 
 
 def easy_train_test_loader(data, batch_size=128, output='image_index',
-                           test_ratio=0.2, split_type='block_middle'):
+                           test_ratio=0.2, split_type='block_middle',
+                           with_time=True, return_all=False):
   """ Get train and test data loader from data xarray
   
   TODO: documentation, for now check called functions
@@ -151,13 +159,17 @@ def easy_train_test_loader(data, batch_size=128, output='image_index',
   nr_frames_after = int( data.attrs['frame_rate_Hz'] * 0.7 )
 
   # get cut out pieces of activity in mat_3d for each trial
-  mat_3d, y = get_trial_matrix_3d(
+  mat_3d, y, t = get_trial_matrix_3d(
                     data=data,
                     nr_frames_after=nr_frames_after,
-                    output=output )
+                    output=output, include_time=True)
+
   # mat_3c (trials, neurons, time)
-  # average out time for now for compatibility across sampling rates
-  X = np.mean(mat_3d, axis=2)
+  if with_time:
+    X = mat_3d
+  else:
+    # average out time for now for compatibility across sampling rates
+    X = np.mean(mat_3d, axis=2)
 
   # get masks with True/False for train/test trials
   nr_trials = X.shape[0]
@@ -168,8 +180,10 @@ def easy_train_test_loader(data, batch_size=128, output='image_index',
   train_loader, test_loader = get_train_test_loader(
         X=X, y=y, train_mask=train_mask, test_mask=test_mask, batch_size=batch_size)
   
-  return train_loader, test_loader
-
+  if not return_all:
+    return train_loader, test_loader
+  else:
+    return train_loader, test_loader, X, y, t, train_mask, test_mask
 
 if __name__ == '__main__':
 
