@@ -43,7 +43,7 @@ def load_one_session(path='046_excSession_v1_ophys_971632311.nc'):
 
 def get_trial_matrix_3d(data, nr_frames_after=10,
                         output='image_index',
-                        include_time = False):
+                        include_time=False):
   """Calculate 3D trial matrix (trials,neurons,time) from loaded data
   Input:
     data: xarray for one session
@@ -85,7 +85,7 @@ def get_trial_matrix_3d(data, nr_frames_after=10,
   if not include_time:
     return trial_matrix_3d, y
   else:
-    return trial_matrix_3d, y, t
+    return trial_matrix_3d, y, time
 
 
 def get_train_test_mask(nr_trials, split_type='block_middle',

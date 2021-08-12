@@ -286,23 +286,19 @@ def _calc_spatial_feature(f_type, first_peak_vs, first_peak_ts, positions):
     return value, unit
 
 
-def calc_features(v, t, f_parameter, start=0, positions=None,
-                  compartments=None, min_peak_height=-60, smooth=False):
+def calc_features(v, t, start=0, min_peak_height=-60):
     """
     Function to calculate feature values of membrane potential(s) by calling
     _calc_local_feature() and
-    _calc_spatial_feature(). Features that cannot be calculated, are set to NaN
     Currently implemented local feature types are:
     Spike-time features:
         avg_rate, latency, first_ISI, CV_ISI, avg_ISI, adapt
     Wave-form features:
         AP_peak, AP_FWHM, AP_trough_depth
-    Spatial features:
-        speed, attenuation
 
     Parameters
     ----------
-    v : array of shape (T,N), in mV
+    v : array of shape (T,), in mV
         Membrane potential trace
     t : array of hape (T,), in seconds
         Timestamps corresponding to membrane potential trace
@@ -311,12 +307,6 @@ def calc_features(v, t, f_parameter, start=0, positions=None,
         be calculated
     start : float (optional), in seconds
         Time of trace from which to start feature calculation
-    positions : list or array of size (N,) (optional, only required for spatial
-    features)
-        Distances between monitors, measured along the neuron (NOT 'as the crow
-        flies' but 'as the road winds')
-    compartments : list or array of size (N,) (optional)
-        Can be used to constrain the selection of used compartments
     min_peak_height : float, in mV
         Membrane potential threshold value to be eligible for peak detection
     smooth : Bool
@@ -328,8 +318,6 @@ def calc_features(v, t, f_parameter, start=0, positions=None,
         Calculated feature value(s), in order as described by f_names
     f_names : list of str(s)
         Names describing calculated features
-    f_compartments : list of int(s)
-        Corresponding compartments, in order as described by f_names
     f_units : list of str(s)
         Corresponding units, in order as described by f_names
     """
@@ -338,65 +326,30 @@ def calc_features(v, t, f_parameter, start=0, positions=None,
                       "avg_ISI", "adapt", "first_AP_peak", "first_AP_FWHM",
                       "first_AP_trough_depth", "mean_AP_peak",
                       "mean_AP_FWHM", "mean_AP_trough_depth"]
-    spatial_features = None  # ["speed", "attenuation"]  Not required for DeepMice project
-    # Create compartments iterable
-    if compartments is None:
-        compartments = np.arange(np.size(v, 0))
     # Create empty list for appending
     f = []
     f_names = []
-    f_compartments = []
     f_units = []
     first_peak_ts = []
     first_peak_vs = []
-    # Loop over compartments
-    for comp_ind, compartment in enumerate(compartments):
-        if smooth and compartment == 0:
-            peaks, _ = find_peaks(v[comp_ind], height=-20)
-        elif smooth and compartment > 0:
-            v_smooth = smooth_func(v[comp_ind], 5)
-            import matplotlib.pyplot as plt
-            plt.figure()
-            plt.plot(v[comp_ind])
-            plt.plot(v_smooth)
-            peaks, _ = find_peaks(v_smooth, height=min_peak_height)
-            print(peaks)
-        else:
-            peaks, _ = find_peaks(v[comp_ind], height=min_peak_height)
-        if peaks.size > 0:
-            first_peak = peaks[0]
-            first_peak_ts.append(t[first_peak])
-            first_peak_vs.append(v[comp_ind][first_peak])
-        else:  # No peaks detected: write NaN values
-            first_peak_ts.append(np.nan)
-            first_peak_vs.append(np.nan)
-        # Loop over local features of interest
-        for f_key, f_value in f_parameter.items():
-            feature_type = f_value["type"]
-            if feature_type not in local_features and feature_type not in \
-                    spatial_features:
-                raise UserWarning("calc_features(): Feature type"
-                                  "{} is not defined.".format(feature_type))
-            if feature_type in local_features:
-                if f_value["compartment"] == compartment:
-                    # Feature of interest corresponds to compartment
-                    feature_value, feature_unit = _calc_local_feature(
-                        feature_type, v[comp_ind], t, peaks, start, end=None)
-                    f.append(feature_value)
-                    f_names.append(f_key)
-                    f_compartments.append(compartment)
-                    f_units.append(feature_unit)
-    # Loop over spatial features of interest
-    for f_key, f_value in f_parameter.items():
-        feature_type = f_value["type"]
-        if feature_type in spatial_features:
-            feature_value, feature_unit = _calc_spatial_feature(
-                feature_type, first_peak_vs, first_peak_ts, positions)
-            f.append(feature_value)
-            f_names.append(f_key)
-            f_compartments.append(0)
-            f_units.append(feature_unit)
+    # find peaks
+    peaks, _ = find_peaks(v, height=min_peak_height)
+    if peaks.size > 0:
+        first_peak = peaks[0]
+        first_peak_ts.append(t[first_peak])
+        first_peak_vs.append(v[first_peak])
+    else:  # No peaks detected: write NaN values
+        first_peak_ts.append(np.nan)
+        first_peak_vs.append(np.nan)
+    # Loop over local features of interest
+    for feature_type in local_features:
+        # Calculate feature
+        feature_value, feature_unit = _calc_local_feature(
+            feature_type, v, t, peaks, start, end=None)
+        f.append(feature_value)
+        f_names.append(feature_type)
+        f_units.append(feature_unit)
 
-    return f, f_names, f_compartments, f_units
+    return f, f_names, f_units
 
 
