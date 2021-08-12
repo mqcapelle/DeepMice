@@ -120,7 +120,6 @@ def get_train_test_loader(X, y, train_mask, test_mask,
   """
 
   # initialize loaders
-  batch_size = 128
   g_seed = torch.Generator()
   g_seed.manual_seed(seed)
 
