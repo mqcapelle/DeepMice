@@ -166,7 +166,7 @@ def easy_train_test_loader(data, batch_size=128, output='image_index',
                                               ratio = test_ratio)
 
   train_loader, test_loader = get_train_test_loader(
-        X=X, y=y, train_mask=train_mask, test_mask=test_mask)
+        X=X, y=y, train_mask=train_mask, test_mask=test_mask, batch_size=batch_size)
   
   return train_loader, test_loader
 
