@@ -15,5 +15,7 @@ setup(
     description='',
     license='BSD 3',
     install_requires=['numpy',
-                      'scipy']
+                      'scipy',
+                      'xarray',
+                      'netcdf4']
 )
