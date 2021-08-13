@@ -28,3 +28,6 @@ class MLPNet(nn.Module):
 
     logits = self.mlp(x)  # forward pass of MLP
     return logits
+
+
+
