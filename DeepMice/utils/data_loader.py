@@ -2,12 +2,15 @@
 from pathlib import Path
 import os
 import requests
+import warnings
 
 # Third party library imports
 import numpy as np
 import xarray as xr
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
+
 
 def download_data(fdir=None):
     # TODO: rewrite this function to download data from OUR drive
@@ -184,6 +187,84 @@ def easy_train_test_loader(data, batch_size=128, output='image_index',
     return train_loader, test_loader
   else:
     return train_loader, test_loader, X, y, t, train_mask, test_mask
+
+
+def easy_train_test_loader_fixed_size(
+        path_to_data_folder,
+        batch_size=128, output='image_index',
+        test_ratio=0.2, split_type='block_middle',
+        with_time=True, return_all=False,
+        min_number_of_neurons=400, max_number_of_neurons=1000,
+        max_number_of_timestamps=None, max_number_of_sessions=None,
+        shuffle_trials=False, shuffle_neurons=False,
+        rng=None
+):
+
+    if rng is None:
+        rng = np.random.default_rng(seed=2021)
+
+    path_to_data_files = list(path_to_data_folder.glob("*.nc"))
+    x_data = None
+
+    session_counter = 0
+    for path_to_data_file in tqdm(path_to_data_files, desc="Load data"):
+        # Load data
+        data = xr.open_dataset(path_to_data_file)
+
+        # Only use behavior sessions with correct amount of neurons
+        number_of_neurons = len(data.neuron_id)
+        if number_of_neurons < min_number_of_neurons or number_of_neurons > max_number_of_neurons:
+            continue
+
+        # Stop if max_number_of_sessions is reached
+        session_counter += 1
+        if max_number_of_sessions and session_counter > max_number_of_sessions:
+            break
+
+        # Load test and train data
+        _, _, x, y, t, train_mask, test_mask = easy_train_test_loader(
+            data=data,
+            batch_size=batch_size,
+            output=output,
+            test_ratio=test_ratio,
+            split_type=split_type,
+            with_time=with_time,
+            return_all=return_all,
+        )
+        x_train, y_train, t_train = x[train_mask], y[train_mask], t[train_mask]
+        x_test, y_test, t_test = x[test_mask], y[test_mask], t[test_mask]
+
+        # Shuffle over trials
+        if shuffle_trials:
+            rng.shuffle(x_train, axis=0)
+            rng.shuffle(x_test, axis=0)
+
+        # Shuffle over neuron positions
+        if shuffle_neurons:
+            rng.shuffle(x_train, axis=1)
+            rng.shuffle(x_test, axis=1)
+
+        # Stack to new shape
+        (x_size_trials, x_size_neurons, x_size_time) = np.shape(x)
+        # # Fix max_number_of_timestamps
+        if max_number_of_timestamps is None:
+            max_number_of_timestamps = x_size_time
+        # # Check if max_number_of_timestamps is constant
+        if x_size_time != max_number_of_timestamps:
+            warnings.warn(f"Number of time stamps ({x_size_time}) is not equal to "
+                          f"maximum_number_of_timestamps ({max_number_of_timestamps})")
+            # # Skip this session
+            continue
+        # Stack to max_number_of_neurons and max_number_of_time_stamps
+        x_new_shape = np.zeros(shape=(x_size_trials, max_number_of_neurons, max_number_of_timestamps))
+        x_new_shape[:, :x_size_neurons, :x_size_time] = x
+        if x_data:
+            # # Append to x_data
+            x_data = np.append(x_data, x_new_shape, axis=0)
+        else:
+            # # Create x_data
+            x_data = x_new_shape
+
 
 if __name__ == '__main__':
 
