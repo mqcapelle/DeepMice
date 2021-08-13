@@ -5,8 +5,8 @@ class MLPNet(nn.Module):
 # from https://deeplearning.neuromatch.io/tutorials/W1D3_MultiLayerPerceptrons/student/W1D3_Tutorial2.html
   def __init__(self, actv, input_feature_num, hidden_unit_nums, output_feature_num):
     super(MLPNet, self).__init__()
-    self.input_feature_num = input_feature_num # save the input size for reshapinng later
-    self.mlp = nn.Sequential() # Initialize layers of MLP
+    self.input_feature_num = input_feature_num  # save the input size for reshapinng later
+    self.mlp = nn.Sequential()  # Initialize layers of MLP
 
     in_num = input_feature_num  # initialize the temporary input feature to each layer
     for i in range(len(hidden_unit_nums)):  # Loop over layers and create each one
@@ -28,3 +28,6 @@ class MLPNet(nn.Module):
 
     logits = self.mlp(x)  # forward pass of MLP
     return logits
+
+
+
