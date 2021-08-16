@@ -201,6 +201,7 @@ def test(model, device, test_iter):
 
 if __name__ == '__main__':
   # example use of the data loader (assumes file to be in working directory)
+
   path = '/mnt/sda5/python_projects/public/DeepMice/018_excSession_v1_ophys_856295914.nc'
   if not os.path.isfile(path):
     raise Exception(
