@@ -39,17 +39,19 @@ class LSTM(nn.Module):
 
     self.fc1 = nn.Linear(input_size, embed_size, bias=True)
 
+    self.relu = nn.ReLU()
+
     self.w_ie = torch.normal(1., 1/np.sqrt(input_size * embed_size),
                              size=(embed_size, input_size))
     with torch.no_grad():
-      self.fc1.weight = self.w_ie
+      self.fc1.weight = nn.Parameter(self.w_ie)
     # Define the word embeddings
     # self.word_embeddings = nn.Embedding(neurons_size, embed_size)
     # Define the dropout layer
     # self.dropout = nn.Dropout(0.5)
     # Define the bilstm layer
     self.bilstm = nn.LSTM(embed_size, hidden_size,
-                          num_layers=self.n_of_hidden,
+                          num_layers=self.n_hidden,
                           batch_first=True,
                           bidirectional=bi)
     # Define the fully-connected layer
@@ -63,30 +65,33 @@ class LSTM(nn.Module):
 
     # Data trough the first input layer should be of dims [N, ..., Hin]
     fc1_in = self.fc1(input_seqence)
+    # print(fc1_in.size())
     # Rectified Linear Units activation
-    fc1_out = nn.ReLU(fc1_in)
+    fc1_out = self.relu(fc1_in)
+    # print(fc1_out.size())
 
     # Define hidden layers of the RNN
-    hidden = (torch.randn(self.n_hidden * self.D, input.shape[1],
+    hidden = (torch.randn(self.n_hidden * self.D, fc1_in.size()[0],
                           self.hidden_size).to(self.device),
-              torch.randn(self.n_hidden * self.D, input.shape[1],
+              torch.randn(self.n_hidden * self.D, fc1_in.size()[0],
                           self.hidden_size).to(self.device))
     # RNN activation
     # Data trough the RNN should be of dim [N, L, Hin]
     recurrent, hidden = self.bilstm(fc1_out, hidden)
-    rec_out = nn.ReLU(recurrent)
+    rec_out = self.relu(recurrent)
 
     # Pass data in the last full connected layer and apply softmax
     fc2_in = self.fc2(rec_out)
-    fc2_out = torch.softmax(fc2_in, dim=-1)
+    fc2_out = torch.softmax(fc2_in, dim=-1).permute(0, 2, 1)
 
     return fc2_out
 
 
 # Training function
-def train(model, device, train_iter, valid_iter, epochs, learning_rate):
-  criterion = nn.CrossEntropyLoss()
-  optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+def train(model, device, train_iter, valid_iter, epochs, learning_rate,
+          criterion=nn.CrossEntropyLoss, optimizer=torch.optim.Adam):
+  criterion = criterion()
+  optimizer = optimizer(model.parameters(), lr=learning_rate)
 
   train_loss, validation_loss = [], []
   train_acc, validation_acc = [], []
@@ -99,15 +104,20 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate):
     steps = 0
 
     for idx, batch in enumerate(train_iter):
-      text = batch.text[0]
+      # text = batch.text[0]
+      data = torch.swapaxes(batch[0], -1, 1).float()
+      # print(data.size())
       # print(type(text), text.shape)
-      target = batch.label
+      target = torch.unsqueeze(batch[1], 1).expand(-1, 21).float()
+      # print(target.size())
       target = torch.autograd.Variable(target).long()
-      text, target = text.to(device), target.to(device)
+      data, target = data.to(device), target.to(device)
 
       # add micro for coding training loop
       optimizer.zero_grad()
-      output = model(text)
+      output = model(data)
+      # print(output)
+      # print(output.size())
 
       loss = criterion(output, target)
       loss.backward()
@@ -117,15 +127,21 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate):
 
       # get accuracy
       _, predicted = torch.max(output, 1)
+      # print(predicted, predicted.size(), target.size())
       total += target.size(0)
-      correct += (predicted == target).sum().item()
+      # print(total)
+      correct += (predicted == target).sum(0).numpy()
 
     train_loss.append(running_loss/len(train_iter))
     train_acc.append(correct/total)
 
-    print(f'Epoch: {epoch + 1}, '
-          f'Training Loss: {running_loss/len(train_iter):.4f}, '
-          f'Training Accuracy: {100*correct/total: .2f}%')
+    print('Epoch {0}\n'.format(epoch + 1),
+          'Training loss: {0}\n'.format(running_loss/len(train_iter)),
+          'Training accuracy: {0}'.format(100*correct/total))
+
+    # print(f'Epoch: {epoch + 1}, '
+    #       f'Training Loss: {running_loss/len(train_iter):.4f}, '
+    #       f'Training Accuracy: {100*correct/total: .2f}%')
 
     # evaluate on validation data
     model.eval()
@@ -134,13 +150,14 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate):
 
     with torch.no_grad():
       for idx, batch in enumerate(valid_iter):
-        text = batch.text[0]
-        target = batch.label
+        # text = batch.text[0]
+        data = torch.swapaxes(batch[0], -1, 1).float()
+        target = torch.unsqueeze(batch[1], 1).expand(-1, 21).float()
         target = torch.autograd.Variable(target).long()
-        text, target = text.to(device), target.to(device)
+        data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
-        output = model(text)
+        output = model(data)
 
         loss = criterion(output, target)
         running_loss += loss.item()
@@ -148,13 +165,16 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate):
         # get accuracy
         _, predicted = torch.max(output, 1)
         total += target.size(0)
-        correct += (predicted == target).sum().item()
+        correct += (predicted == target).sum(0).numpy()
 
     validation_loss.append(running_loss/len(valid_iter))
     validation_acc.append(correct/total)
 
-    print (f'Validation Loss: {running_loss/len(valid_iter):.4f}, '
-           f'Validation Accuracy: {100*correct/total: .2f}%')
+    print('Epoch {0}\n'.format(epoch + 1),
+          'Validation Loss: {0}\n'.format(running_loss/len(valid_iter)),
+          'Validation Accuracy: {0}'.format(100*correct/total))
+    # print(f'Validation Loss: {running_loss/len(valid_iter):.4f}, '
+    #       f'Validation Accuracy: {100*correct/total: .2f}%')
 
   return train_loss, train_acc, validation_loss, validation_acc
 
@@ -196,7 +216,22 @@ if __name__ == '__main__':
                                                      return_all=False
                                                      )
 
-  X_batch, y_batch = next(iter(train_loader))
   print('Data loaded successfully :)')
-  print('X shape:', X_batch.shape)
-  print('y shape:', y_batch.shape)
+  print("Shape:", next(iter(train_loader))[0].shape)
+
+  X_batch, y_batch = next(iter(train_loader))
+  insz = X_batch.shape[1]
+  ousz = len(np.unique(y_batch))
+  # print(insz, ousz)
+
+  model = LSTM(input_size=insz, embed_size=200, n_hidden=2, hidden_size=100,
+               output_size=ousz, device='cpu', bi=False)
+
+  train_loss, train_acc, validation_loss, validation_acc = \
+    train(model, 'cpu', train_loader, test_loader, 100, 0.005,
+        criterion=nn.CrossEntropyLoss, optimizer=torch.optim.Adam)
+
+  # X_batch, y_batch = next(iter(train_loader))
+  # print('Data loaded successfully :)')
+  # print('X shape:', X_batch.shape)
+  # print('y shape:', y_batch.shape)
