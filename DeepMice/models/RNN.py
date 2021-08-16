@@ -157,7 +157,7 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate,
         data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
-        output = model(data)
+        output = model(text)
 
         loss = criterion(output, target)
         running_loss += loss.item()
@@ -165,7 +165,7 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate,
         # get accuracy
         _, predicted = torch.max(output, 1)
         total += target.size(0)
-        correct += (predicted == target).sum(0).numpy()
+        correct += (predicted == target).sum().item()
 
     validation_loss.append(running_loss/len(valid_iter))
     validation_acc.append(correct/total)
