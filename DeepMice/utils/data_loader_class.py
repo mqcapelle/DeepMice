@@ -58,8 +58,11 @@ class DeepMiceDataLoader:
         # self.max_number_of_sessions = max_number_of_sessions
 
 
-        self.shuffle_trials = shuffle_trials
-        self.shuffle_neurons = shuffle_neurons
+        # self.shuffle_trials = shuffle_trials
+        # self.shuffle_neurons = shuffle_neurons
+        self.train_loader=None
+        self.test_loader=None
+        self.val_loader=None
 
         self.seed = seed
         self.num_workers = 40
@@ -130,7 +133,7 @@ class DeepMiceDataLoader:
 
 
 
-    def get_trial_matrix_3d(self, data, nr_frames_after):
+    def get_trial_matrix_3d(self):
         """Calculate 3D trial matrix (trials,neurons,time) from loaded data
         Input:
           data: xarray for one session
@@ -143,9 +146,9 @@ class DeepMiceDataLoader:
           y: 1d array (trials)
         """
         # use descriptive variables for the dimensions
-        nr_trials = len(data.trial)
-        nr_frames = nr_frames_after
-        nr_neurons = data.activity.shape[0]
+        nr_trials = len(self.data.trial)
+        nr_frames = self.nr_frames_after
+        nr_neurons = self.data.activity.shape[0]
 
         trial_matrix_3d = np.zeros((nr_trials, nr_neurons, nr_frames))
         time = np.zeros((nr_trials, nr_frames))
@@ -153,23 +156,26 @@ class DeepMiceDataLoader:
 
         for i in range(nr_trials):
             # extract the neural activity
-            start_idx = int(data.start_frame[i])  # frame of trial start
-            trial_matrix_3d[i, :, :] = data.activity.data[:, start_idx:start_idx + nr_frames]
+            start_idx = int(self.data.start_frame[i])  # frame of trial start
+            trial_matrix_3d[i, :, :] = self.data.activity.data[:, start_idx:start_idx + nr_frames]
 
             # extract time
-            time[i, :] = data.activity.time[start_idx:start_idx + nr_frames]
+            time[i, :] = self.data.activity.time[start_idx:start_idx + nr_frames]
 
             # select the predictor that should be used
             if self.output == 'image_index':
-                y[i] = data.image_index[i]
+                y[i] = self.data.image_index[i]
             elif self.output == 'is_change':
-                y[i] = data.is_change[i]
+                y[i] = self.data.is_change[i]
             elif self.output == 'rewarded':
-                y[i] = data.rewarded[i]
+                y[i] = self.data.rewarded[i]
             else:
                 raise Exception('Argument for output="{}" not supported.'.format(self.output))
+        self.trial_matrix_3d=trial_matrix_3d
 
-        return trial_matrix_3d, y, time
+        self.y=y
+        self.time=time
+
 
     def get_train_test_mask(self, nr_trials):
         """ Return two masks with True/False to select train and test trials
@@ -206,3 +212,26 @@ class DeepMiceDataLoader:
             session_counter += 1
             if max_number_of_sessions and session_counter > max_number_of_sessions:
                 break
+
+    def create_dataloader(self):
+        self.train_loader= DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers,
+                          shuffle=True)
+
+
+        self.val_loader= DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers,
+                          shuffle=False)
+        self.test_loader= DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers,
+                          shuffle=False)
+
+
+if __name__ == "__main__":
+    path_to_data_file = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/000_excSession_v1_ophys_775289198.nc')
+
+    my_class = DeepMiceDataLoader(path_to_data_file)
+    my_class.setup()
+
+    print(np.shape(my_class.dataset))
+
+    # print(my_class.train_dataset.shape)
+    # print(my_class.test_dataset.shape)
+
