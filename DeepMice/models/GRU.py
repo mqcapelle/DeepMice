@@ -183,14 +183,22 @@ if __name__ == "__main__":
                               worker_init_fn=3453)
 
     dataset_val = SequentialDataset(data_interface,
-                      part='val',  # or 'test', 'val'
-                      len_sequence=15,
-                      )
+                                    part='val',  # or 'test', 'val'
+                                    len_sequence=15,)
 
     val_loader = DataLoader(dataset_val,
-                              batch_size=5,
-                              shuffle=False,
-                              worker_init_fn=3453)
+                            batch_size=5,
+                            shuffle=False,
+                            worker_init_fn=3453)
+
+    dataset_test = SequentialDataset(data_interface,
+                                     part='test',  # or 'test', 'val'
+                                     len_sequence=15,)
+
+    test_loader = DataLoader(dataset_test,
+                             batch_size=5,
+                             shuffle=False,
+                             worker_init_fn=3453)
 
     X_b, y_b, init_b = next( iter(train_loader) )
 
@@ -200,12 +208,18 @@ if __name__ == "__main__":
 
     # Initialize model
     model = GRU(example_batch_X=X_b)
-    y = model(X_b)
-    # print(y.shape)
 
+    # Train and validate
     train(model=model,
-          train_loader = train_loader,
-          valid_loader = val_loader,
-          device = 'cpu',
-          learn_rate=1e-3, n_epochs=50, criterion=nn.CrossEntropyLoss(),
+          train_loader=train_loader,
+          valid_loader=val_loader,
+          device='cpu',
+          learn_rate=1e-3, n_epochs=50,
+          criterion=nn.CrossEntropyLoss(),
           optimizer=torch.optim.Adam)
+
+    # Test
+    accuracy = test(model=model,
+                    test_loader=test_loader,
+                    device='cpu')
+
