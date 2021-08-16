@@ -7,7 +7,8 @@ from DeepMice.utils.data_loader import load_one_session, easy_train_test_loader
 
 
 class LSTM(nn.Module):
-  def __init__(self, input_size, embed_size, n_hidden, hidden_size, output_size, device, bi=True):
+  def __init__(self, input_size, embed_size, n_hidden, hidden_size,
+               output_size, device, bi=True):
     '''Define a LSTM model
 
     Note that for our task, the data corresponds to:
@@ -50,7 +51,7 @@ class LSTM(nn.Module):
     self.bilstm = nn.LSTM(embed_size, hidden_size,
                           num_layers=self.n_of_hidden,
                           batch_first=True,
-                          bidirectional=True)
+                          bidirectional=bi)
     # Define the fully-connected layer
     self.fc2 = nn.Linear(hidden_size, output_size)
 
