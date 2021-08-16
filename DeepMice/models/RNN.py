@@ -84,9 +84,9 @@ class LSTM(nn.Module):
 
 
 # Training function
-def train(model, device, train_iter, valid_iter, epochs, learning_rate):
-  criterion = nn.CrossEntropyLoss()
-  optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+def train(model, device, train_iter, valid_iter, epochs, learning_rate, criterion=nn.CrossEntropyLoss(), optimizer=torch.optim.Adam):
+  # Assign optimizer parameters
+  optimizer = optimizer(model.parameters(), lr=learning_rate)
 
   train_loss, validation_loss = [], []
   train_acc, validation_acc = [], []
@@ -153,7 +153,7 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate):
     validation_loss.append(running_loss/len(valid_iter))
     validation_acc.append(correct/total)
 
-    print (f'Validation Loss: {running_loss/len(valid_iter):.4f}, '
+    print(f'Validation Loss: {running_loss/len(valid_iter):.4f}, '
            f'Validation Accuracy: {100*correct/total: .2f}%')
 
   return train_loss, train_acc, validation_loss, validation_acc
@@ -196,6 +196,7 @@ if __name__ == '__main__':
                                                      with_time=True,
                                                      return_all=False
                                                      )
+
 
   X_batch, y_batch = next(iter(train_loader))
   print('Data loaded successfully :)')

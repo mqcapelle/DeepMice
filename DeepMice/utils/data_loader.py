@@ -134,13 +134,28 @@ def get_train_test_loader(X, y, train_mask, test_mask,
   g_seed.manual_seed(seed)
 
   train_data = TensorDataset(torch.from_numpy(X[train_mask]), torch.from_numpy(y[train_mask]))
+
+
+  #   # TODO: the validate/train ratio is now hardcoded
+  # validate_data = train_data[:int(len(train_data) / 10)]
+  # train_data = train_data[int(len(train_data) / 10):]
+
+
   train_loader = DataLoader(train_data,
                               batch_size=batch_size,
                               shuffle=True,
                               num_workers=0,
                               worker_init_fn=seed,
                               generator=g_seed)
-  
+
+  validate_loader = DataLoader(validate_data,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              num_workers=0,
+                              worker_init_fn=seed,
+                              generator=g_seed)
+
+
   test_data = TensorDataset(torch.from_numpy(X[test_mask]), torch.from_numpy(y[test_mask]))
   test_loader = DataLoader(test_data,
                               batch_size=batch_size,
@@ -149,17 +164,17 @@ def get_train_test_loader(X, y, train_mask, test_mask,
                               worker_init_fn=seed,
                               generator=g_seed)
 
-  return train_loader, test_loader 
+  return train_loader, validate_loader, test_loader
 
 def easy_train_test_loader(data, batch_size=128, output='image_index',
-                           test_ratio=0.2, split_type='block_middle',
+                           ratio=(0.8, 0.1, 0.1), split_type='block_middle',
                            with_time=True, return_all=False):
   """ Get train and test data loader from data xarray
   
   TODO: documentation, for now check called functions
   """
   # find out how many frames still belong to one trial (0.75 seconds)
-  nr_frames_after = int( data.attrs['frame_rate_Hz'] * 0.7 )
+  nr_frames_after = int(data.attrs['frame_rate_Hz'] * 0.7 )
 
   # get cut out pieces of activity in mat_3d for each trial
   mat_3d, y, t = get_trial_matrix_3d(
@@ -180,13 +195,14 @@ def easy_train_test_loader(data, batch_size=128, output='image_index',
                                               split_type = split_type,
                                               ratio = test_ratio)
 
-  train_loader, test_loader = get_train_test_loader(
+  train_loader, validate_loader, test_loader = get_train_test_loader(
         X=X, y=y, train_mask=train_mask, test_mask=test_mask, batch_size=batch_size)
-  
+
+
   if not return_all:
-    return train_loader, test_loader
+    return train_loader, validate_loader, test_loader
   else:
-    return train_loader, test_loader, X, y, t, train_mask, test_mask
+    return train_loader, validate_loader, test_loader, X, y, t, train_mask, test_mask
 
 def easy_train_test_loader_fixed_size_per_session(
     path_to_data_file,
@@ -249,7 +265,7 @@ if __name__ == '__main__':
       raise Exception('Example file "{}" is not in working directory.'.format(path))
     data = load_one_session(path)
 
-    train_loader, test_loader = easy_train_test_loader( data=data,
+    train_loader, test_loader = easy_train_test_loader(data=data,
                                                    batch_size=128,
                                                    output='image_index',
                                                    test_ratio = 0.2,
