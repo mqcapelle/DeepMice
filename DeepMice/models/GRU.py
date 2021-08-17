@@ -110,7 +110,7 @@ def train(model, train_loader, valid_loader, device,
             # Calculate accuracy
             _, predicted = torch.max(output, dim=2)
 
-            running_correct += (predicted == y_batch).sum().numpy()  # Simply copied .sum(0).numpy() from RNN.py
+            running_correct += (predicted == y_batch).sum().to('cpu').numpy()  # Simply copied .sum(0).numpy() from RNN.py
             running_total += torch.numel(y_batch)
 
         train_loss.append(running_loss / len(train_loader))
@@ -163,6 +163,7 @@ def train(model, train_loader, valid_loader, device,
 
 def test(model, device, test_loader):
     model.eval()
+    model.to(device)
 
     test_correct, test_total = 0, 0
     for batch_index, batch in enumerate(test_loader):
@@ -175,7 +176,7 @@ def test(model, device, test_loader):
 
         # Calculate accuracy
         _, predicted = torch.max(output, dim=2)
-        test_correct += (predicted == y_batch).sum().numpy()  # Simply copied .sum(0).numpy() from RNN.py
+        test_correct += (predicted == y_batch).sum().to('cpu').numpy()  # Simply copied .sum(0).numpy() from RNN.py
         test_total += torch.numel(y_batch)
 
     accuracy = test_correct / test_total
@@ -237,5 +238,5 @@ if __name__ == "__main__":
     # Test model
     accuracy = test(model=model,
                     test_loader=test_loader,
-                    device='cpu')
+                    device=DEVICE)
 
