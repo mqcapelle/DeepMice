@@ -6,17 +6,14 @@
 from pathlib import Path
 # Third party imports
 import matplotlib.pyplot as plt
-import numpy as np
-import xarray as xr
 
 # Local library imports
-from DeepMice.classical_clustering.fa_calcfeatures import calc_features
-from DeepMice.utils.data_loader import easy_train_test_loader, load_one_session
+from DeepMice.obsolete.data_loader import easy_train_test_loader, load_one_session
 
 # ##############################################################
 # Paths
 # ##############################################################
-path_to_data_folder = Path("/Users/mc/PycharmProjects/DeepMice/DeepMice/data")
+path_to_data_folder = Path("/DeepMice/data")
 path_to_data_files = list(path_to_data_folder.glob("*.nc"))
 path_to_data_file = path_to_data_files[1]
 

@@ -1,18 +1,16 @@
 # Standard library imports
 from pathlib import Path
-import os
-import requests
-import warnings
 
 # Third party library imports
 import numpy as np
 import xarray as xr
 import torch
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 # Local library imports
-from DeepMice.helpers.helpers import set_seed, set_device
+from DeepMice.utils.helpers import set_seed
+
 
 class my_dataset(Dataset):
     def __init__(self, data, label):
@@ -225,7 +223,7 @@ class DeepMiceDataLoader:
 
 
 if __name__ == "__main__":
-    path_to_data_file = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/000_excSession_v1_ophys_775289198.nc')
+    path_to_data_file = Path('/DeepMice/data/000_excSession_v1_ophys_775289198.nc')
 
     my_class = DeepMiceDataLoader(path_to_data_file)
     my_class.setup()
