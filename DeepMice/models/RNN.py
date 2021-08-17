@@ -3,7 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from DeepMice.utils.data_loader import load_one_session, easy_train_test_loader
+from DeepMice.utils.data_loader_class import DeepMiceDataLoader
+# from DeepMice.utils.data_loader import load_one_session, easy_train_test_loader
 
 
 class LSTM(nn.Module):
@@ -55,7 +56,7 @@ class LSTM(nn.Module):
                           batch_first=True,
                           bidirectional=bi)
     # Define the fully-connected layer
-    self.fc2 = nn.Linear(hidden_size, output_size)
+    self.fc2 = nn.Linear(self.D * hidden_size, output_size)
 
 
   def forward(self, input_seqence):
@@ -108,7 +109,7 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate,
       data = torch.swapaxes(batch[0], -1, 1).float()
       # print(data.size())
       # print(type(text), text.shape)
-      target = torch.unsqueeze(batch[1], 1).expand(-1, 21).float()
+      target = torch.squeeze(batch[1], -1).expand(-1, data.size(1)).float()
       # print(target.size())
       target = torch.autograd.Variable(target).long()
       data, target = data.to(device), target.to(device)
@@ -152,12 +153,12 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate,
       for idx, batch in enumerate(valid_iter):
         # text = batch.text[0]
         data = torch.swapaxes(batch[0], -1, 1).float()
-        target = torch.unsqueeze(batch[1], 1).expand(-1, 21).float()
+        target = torch.squeeze(batch[1], -1).expand(-1, data.size(1)).float()
         target = torch.autograd.Variable(target).long()
         data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
-        output = model(text)
+        output = model(data)
 
         loss = criterion(output, target)
         running_loss += loss.item()
@@ -165,7 +166,7 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate,
         # get accuracy
         _, predicted = torch.max(output, 1)
         total += target.size(0)
-        correct += (predicted == target).sum().item()
+        correct += (predicted == target).sum(0).numpy()
 
     validation_loss.append(running_loss/len(valid_iter))
     validation_acc.append(correct/total)
@@ -176,7 +177,7 @@ def train(model, device, train_iter, valid_iter, epochs, learning_rate,
     # print(f'Validation Loss: {running_loss/len(valid_iter):.4f}, '
     #       f'Validation Accuracy: {100*correct/total: .2f}%')
 
-  return train_loss, train_acc, validation_loss, validation_acc
+  return model, train_loss, train_acc, validation_loss, validation_acc
 
 
 # Testing function
@@ -186,15 +187,16 @@ def test(model, device, test_iter):
   total = 0
   with torch.no_grad():
     for idx, batch in enumerate(test_iter):
-      text = batch.text[0]
-      target = batch.label
+      data = torch.swapaxes(batch[0], -1, 1).float()
+      target = torch.squeeze(batch[1], -1).expand(-1, 21).float()
+      # print(target.size())
       target = torch.autograd.Variable(target).long()
-      text, target = text.to(device), target.to(device)
+      data, target = data.to(device), target.to(device)
 
-      outputs = model(text)
+      outputs = model(data)
       _, predicted = torch.max(outputs, 1)
       total += target.size(0)
-      correct += (predicted == target).sum().item()
+      correct += (predicted == target).sum(0).numpy()
 
     acc = 100 * correct / total
     return acc
@@ -206,21 +208,15 @@ if __name__ == '__main__':
   if not os.path.isfile(path):
     raise Exception(
       'Example file "{}" is not in working directory.'.format(path))
-  data = load_one_session(path)
 
-  train_loader, test_loader = easy_train_test_loader(data=data,
-                                                     batch_size=128,
-                                                     output='image_index',
-                                                     test_ratio=0.2,
-                                                     split_type='block_middle',
-                                                     with_time=True,
-                                                     return_all=False
-                                                     )
+  my_class = DeepMiceDataLoader(path)
+  my_class.setup()
 
-  print('Data loaded successfully :)')
-  print("Shape:", next(iter(train_loader))[0].shape)
+  train_trials = my_class.train_loader
+  validate_trials = my_class.val_loader
+  test_trials = my_class.test_loader
 
-  X_batch, y_batch = next(iter(train_loader))
+  X_batch, y_batch = next(iter(train_trials))
   insz = X_batch.shape[1]
   ousz = len(np.unique(y_batch))
   # print(insz, ousz)
@@ -228,11 +224,9 @@ if __name__ == '__main__':
   model = LSTM(input_size=insz, embed_size=200, n_hidden=2, hidden_size=100,
                output_size=ousz, device='cpu', bi=False)
 
-  train_loss, train_acc, validation_loss, validation_acc = \
-    train(model, 'cpu', train_loader, test_loader, 100, 0.005,
+  trained_model, train_loss, train_acc, validation_loss, validation_acc = \
+    train(model, 'cpu', train_trials, validate_trials, 50, 0.005,
         criterion=nn.CrossEntropyLoss, optimizer=torch.optim.Adam)
 
-  # X_batch, y_batch = next(iter(train_loader))
-  # print('Data loaded successfully :)')
-  # print('X shape:', X_batch.shape)
-  # print('y shape:', y_batch.shape)
+  test_accuracy = test(trained_model, 'cpu', test_trials)
+  print('\nThe test accuracy is: {0}'.format(test_accuracy))
