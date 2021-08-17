@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -142,7 +141,7 @@ def train(model, train_loader, valid_loader, device,
                   f"   Training loss:     {train_loss[-1]:1.3f}  | Validation loss:          {validation_loss[-1]:1.3f}\n"
                   f"   Training accuracy: {train_acc[-1] * 100:3.2f}  | Validation accuracy: {validation_acc[-1] * 100:3.2f}"
                   )
-
+    return model
 
 def test(model, device, test_loader):
     model.eval()
