@@ -4,8 +4,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from DeepMice.utils.data_loader import load_example_data
-from DeepMice.visu.utils import plot_traces_above
+from DeepMice.obsolete.data_loader import load_example_data
 
 
 def plot_traces_above(time, traces, axis=None, key=None, spacing=0.5, linewidth=0.5, alpha=1):

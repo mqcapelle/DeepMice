@@ -1,4 +1,5 @@
 
+import copy
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -8,12 +9,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 # Local library imports
-# from DeepMice.utils.easy_load import DataHandler
 from DeepMice.utils.sequential_data_loader import DataInterface, SequentialDataset
+from DeepMice.utils.helpers import set_seed, set_device, seed_worker
 
 
 class GRU(nn.Module):
-    def __init__(self, example_batch_X, x_feat_length=20, gru_hidden_size=9,):
+    def __init__(self, example_batch_X, x_feat_length=20, gru_hidden_size=9):
         super().__init__()
         # Assign parameters
         self.n_batches = example_batch_X.shape[0]  # However, we do not need this
@@ -23,7 +24,6 @@ class GRU(nn.Module):
         self.x_feat_length = x_feat_length
         self.gru_hidden_size = gru_hidden_size
         self.n_images = 8 + 1
-
 
         # Define layers
         self.encoder_layer = nn.Linear(in_features=self.n_neurons*self.n_timestamps,
@@ -67,15 +67,20 @@ class GRU(nn.Module):
 
 
 def train(model, train_loader, valid_loader, device,
-          learn_rate, n_epochs, criterion=nn.CrossEntropyLoss(),
-          optimizer=torch.optim.Adam):
+          learn_rate, n_epochs, patience,
+          criterion=nn.CrossEntropyLoss(), optimizer=torch.optim.Adam):
+
+    model.to(device)
     # Assign optimizer parameters
     optimizer = optimizer(model.parameters(), lr=learn_rate)
 
     # Allocate loss and accuracy data
     train_loss, validation_loss = [], []
     train_acc, validation_acc = [], []
+    best_acc = -1e3  # below first accuracy for sure...
+    wait = 0
 
+    # early_stopping = EarlyStopping(patience=patience, verbose=True)
     for epoch in range(n_epochs):
         # Train
         model.train()  # Tell model that we start training
@@ -111,37 +116,49 @@ def train(model, train_loader, valid_loader, device,
         train_loss.append(running_loss / len(train_loader))
         train_acc.append(running_correct / running_total)
 
-        if epoch % 2 == 0:
+        # Evaluate on validation data
+        model.eval()
+        val_loss = 0.
+        val_correct, val_total = 0, 0
 
-            # Evaluate on validation data
-            model.eval()
-            val_loss = 0.
-            val_correct, val_total = 0, 0
+        for batch_index, batch in enumerate(valid_loader):
+            # send to GPU
+            X_batch, y_batch, init_batch = batch
+            y_batch = y_batch.long()  # change datatype of prediction to long int
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
 
-            for batch_index, batch in enumerate(valid_loader):
-                # send to GPU
-                X_batch, y_batch, init_batch = batch
-                y_batch = y_batch.long()  # change datatype of prediction to long int
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            output = model(X_batch)
+            # output shape (nr_batches, len_sequence, n_images)
 
-                output = model(X_batch)
-                # output shape (nr_batches, len_sequence, n_images)
+            loss = criterion(torch.transpose(output, 1, 2), y_batch)
+            val_loss += loss.item()
 
-                loss = criterion(torch.transpose(output, 1, 2), y_batch)
-                val_loss += loss.item()
+            # Calculate accuracy
+            _, predicted = torch.max(output, dim=2)
+            val_correct += (predicted == y_batch).sum().to('cpu').numpy()  # Simply copied .sum(0).numpy() from RNN.py
+            val_total += torch.numel(y_batch)
 
-                # Calculate accuracy
-                _, predicted = torch.max(output, dim=2)
-                val_correct += (predicted == y_batch).sum().numpy()  # Simply copied .sum(0).numpy() from RNN.py
-                val_total += torch.numel(y_batch)
+        validation_loss.append(val_loss / len(valid_loader))
+        validation_acc.append(val_correct / val_total)
 
-            validation_loss.append(val_loss / len(valid_loader))
-            validation_acc.append(val_correct / val_total)
+        print(f"Epoch {epoch:3.0f} | Training loss:     {train_loss[-1]:1.3f} | Validation loss:     {validation_loss[-1]:1.3f}\n"
+              f"            Training accuracy: {train_acc[-1] * 100:3.2f}  | Validation accuracy: {validation_acc[-1] * 100:3.2f}"
+              )
 
-            print(f"Epoch {epoch}: \n"
-                  f"   Training loss:     {train_loss[-1]:1.3f}  | Validation loss:          {validation_loss[-1]:1.3f}\n"
-                  f"   Training accuracy: {train_acc[-1] * 100:3.2f}  | Validation accuracy: {validation_acc[-1] * 100:3.2f}"
-                  )
+        # Early stopping
+        if (validation_acc[-1] > best_acc):
+            best_acc = validation_acc[-1]
+            best_epoch = epoch
+            best_model = copy.deepcopy(model).to('cpu')
+            wait = 0
+        else:
+            wait += 1
+
+        if wait > patience:
+            print(f'Early stopped with best epoch: {best_epoch}')
+            break
+
+    return best_model, best_epoch, train_loss, train_acc, validation_loss, validation_acc
 
 
 def test(model, device, test_loader):
@@ -167,41 +184,35 @@ def test(model, device, test_loader):
 
 if __name__ == "__main__":
     # Paths
+    session_number = 20
+    path_to_data_folder = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/')
+    path_to_session_file = list(path_to_data_folder.glob(f'*{session_number}_*.nc'))[0]
     # ex_path = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/020_excSession_v1_ophys_858863712.nc')    # example file
-    ex_path = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/018_excSession_v1_ophys_856295914.nc')
+    # ex_path = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/018_excSession_v1_ophys_856295914.nc')
 
     # Load data
-    data_interface = DataInterface(path=ex_path)
-    dataset_train = SequentialDataset(data_interface,
-                                part='train',    # or 'test', 'val'
-                                len_sequence=15
-                                )
+    data_interface = DataInterface(path=path_to_session_file)
+    dataset_train = SequentialDataset(data_interface, part='train', len_sequence=15)
+    dataset_val = SequentialDataset(data_interface, part='val', len_sequence=15,)
+    dataset_test = SequentialDataset(data_interface, part='test', len_sequence=15,)
 
-    train_loader = DataLoader(dataset_train,
-                              batch_size=5,
-                              shuffle=True,
-                              worker_init_fn=3453)
+    # set seeds
+    SEED = 2021
+    g_seed = torch.Generator()
+    g_seed.manual_seed(SEED)
+    set_seed(seed=SEED)
+    DEVICE = set_device()
 
-    dataset_val = SequentialDataset(data_interface,
-                                    part='val',  # or 'test', 'val'
-                                    len_sequence=15,)
+    train_loader = DataLoader(dataset_train, batch_size=5, shuffle=True,
+                              worker_init_fn=seed_worker, generator=g_seed)
 
-    val_loader = DataLoader(dataset_val,
-                            batch_size=5,
-                            shuffle=False,
-                            worker_init_fn=3453)
+    val_loader = DataLoader(dataset_val, batch_size=5, shuffle=False,
+                              worker_init_fn=seed_worker, generator=g_seed)
 
-    dataset_test = SequentialDataset(data_interface,
-                                     part='test',  # or 'test', 'val'
-                                     len_sequence=15,)
+    test_loader = DataLoader(dataset_test, batch_size=5, shuffle=False,
+                              worker_init_fn=seed_worker, generator=g_seed)
 
-    test_loader = DataLoader(dataset_test,
-                             batch_size=5,
-                             shuffle=False,
-                             worker_init_fn=3453)
-
-    X_b, y_b, init_b = next( iter(train_loader) )
-
+    X_b, y_b, init_b = next(iter(train_loader))
     # print(X_b.shape,    # Neural activity (batch_size, len_sequence, nr_neurons, time)
     #       y_b.shape,    # Shown images    (batch_size, len_sequence)
     #       init_b.shape) # Initial image   (batch_size, 1)
@@ -209,16 +220,21 @@ if __name__ == "__main__":
     # Initialize model
     model = GRU(example_batch_X=X_b)
 
-    # Train and validate
-    train(model=model,
-          train_loader=train_loader,
-          valid_loader=val_loader,
-          device='cpu',
-          learn_rate=1e-3, n_epochs=50,
-          criterion=nn.CrossEntropyLoss(),
-          optimizer=torch.optim.Adam)
+    # Train and validate model
+    best_model, best_epoch, train_loss, train_acc, validation_loss, validation_acc = train(
+        model=model,
+        train_loader=train_loader,
+        valid_loader=val_loader,
+        device=DEVICE,
+        learn_rate=1e-3, n_epochs=50, patience=5,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam
+    )
 
-    # Test
+    # Save the model
+    # TODO: save the model later
+
+    # Test model
     accuracy = test(model=model,
                     test_loader=test_loader,
                     device='cpu')

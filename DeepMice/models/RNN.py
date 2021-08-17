@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from DeepMice.utils.data_loader import load_one_session, easy_train_test_loader
+from DeepMice.obsolete.data_loader import load_one_session, easy_train_test_loader
 
 
 class LSTM(nn.Module):

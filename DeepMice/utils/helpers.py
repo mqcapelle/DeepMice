@@ -27,3 +27,5 @@ def set_device():
         print("GPU is enabled in this notebook")
 
     return device
+
+

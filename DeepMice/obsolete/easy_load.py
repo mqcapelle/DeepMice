@@ -80,6 +80,7 @@ class DataHandler:
 
 class EasyDataset(Dataset):
     def __init__(self, path):
+        pass
 
     def __getitem__(self, index):
         return self.data[index, :, :], self.label[index, :, :]
