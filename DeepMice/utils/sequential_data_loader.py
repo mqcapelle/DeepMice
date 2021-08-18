@@ -4,6 +4,34 @@ import xarray as xr
 from torch.utils.data import DataLoader, Dataset
 import torch
 
+from DeepMice.utils.helpers import set_seed, seed_worker
+
+
+def get_train_val_test_loader(path, len_seq=15, batch_size=10, SEED=None):
+    # Load data
+    data_interface = DataInterface(path=path)
+
+    # prepare datasets
+    dataset_train = SequentialDataset(data_interface, part='train', len_sequence=len_seq)
+    dataset_val = SequentialDataset(data_interface, part='val', len_sequence=len_seq, )
+    dataset_test = SequentialDataset(data_interface, part='test', len_sequence=len_seq, )
+
+    # set seeds for everything
+    g_seed = torch.Generator()
+    g_seed.manual_seed(SEED)
+    set_seed(seed=SEED)
+
+    # initialize loaders
+    train_loader = DataLoader(dataset_train, batch_size=batch_size, shuffle=True,
+                              worker_init_fn=seed_worker, generator=g_seed)
+
+    val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False,
+                            worker_init_fn=seed_worker, generator=g_seed)
+
+    test_loader = DataLoader(dataset_test, batch_size=batch_size, shuffle=False,
+                             worker_init_fn=seed_worker, generator=g_seed)
+
+    return train_loader, val_loader, test_loader
 
 
 class DataInterface:
@@ -18,6 +46,7 @@ class DataInterface:
     """
     def __init__(self, path=None):
         """ If path=None, then dummy data is loaded """
+        # Assign parameters
         if path is not None:
             self.path = path
             self.data = xr.open_dataset(path)
@@ -40,7 +69,6 @@ class DataInterface:
         m = self.masks[part]
         return self.trial_mat[m], self.y[m], self.time[m]
 
-    
     # local helper functions
     def get_trial_matrix_3d(self, data, seconds_after=0.7):
         """Calculate 3D trial matrix (trials,neurons,time) from loaded data

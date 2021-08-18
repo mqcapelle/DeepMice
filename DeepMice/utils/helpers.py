@@ -18,6 +18,7 @@ def set_seed(seed=None, seed_torch=True):
 
     print(f'Random seed {seed} has been set.')
 
+
 def seed_worker(worker_id):
   worker_seed = torch.initial_seed() % 2**32
   np.random.seed(worker_seed)
