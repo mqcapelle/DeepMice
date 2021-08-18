@@ -10,6 +10,7 @@ def train(model, train_loader, valid_loader, device,
           learn_rate, n_epochs, patience,
           freeze=False, path_to_model_state_dict=None,
           criterion=nn.CrossEntropyLoss(), optimizer=torch.optim.Adam):
+
     time_start = time.time_ns()
 
     model.to(device)
@@ -95,7 +96,7 @@ def train(model, train_loader, valid_loader, device,
         validation_acc.append(val_correct / val_total)
 
         print(f"Epoch {epoch:2.0f} | Train acc:{train_acc[-1] * 100:4.2f} | Val acc{validation_acc[-1] * 100:4.2f} | "
-              f"Train loss: {train_loss[-1]:1.3f} | Val loss: {validation_loss[-1]:1.3f} | Time passed: {(time.time_ns() - time_start) * 1E9:3.2f} s")
+              f"Train loss: {train_loss[-1]:1.3f} | Val loss: {validation_loss[-1]:1.3f} | Time passed: {(time.time_ns() - time_start) * 1E-9:3.2f} s")
 
         # Early stopping
         if (validation_acc[-1] > best_acc):
