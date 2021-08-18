@@ -120,7 +120,6 @@ if __name__ == "__main__":
 
         # Test model
         accuracy_transfer = test(model=best_transfer_model, test_loader=test_loader, device=DEVICE)
-        print(f"Test accuracy transfer model: {accuracy_transfer*100:3.1f} %")
 
         # Print results
         print(f"Transfer model | Test acc {accuracy_transfer * 100:3.1f} % | Neurons: {transfer_neurons} | Session: {transfer_session_number}")
@@ -140,5 +139,5 @@ ax1.set_xlabel("Epochs")
 ax1.set_ylabel("Accuracy")
 ax1.legend()
 
-plt.savefig(path_to_figure_folder.joinpath(f'train_{train_neurons}neurons_{train_session_number}session_Transfer_{transfer_neurons}neurons_{train_session_number}session'))
+plt.savefig(path_to_figure_folder.joinpath(f'train_{train_neurons:3.0f}neurons_{train_session_number}session_Transfer_{transfer_neurons:3.0f}neurons_{train_session_number}session'))
 

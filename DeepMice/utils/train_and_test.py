@@ -95,7 +95,7 @@ def train(model, train_loader, valid_loader, device,
         validation_loss.append(val_loss / len(valid_loader))
         validation_acc.append(val_correct / val_total)
 
-        print(f"Epoch {epoch:2.0f} | Train acc:{train_acc[-1] * 100:4.2f} | Val acc{validation_acc[-1] * 100:4.2f} | "
+        print(f"Epoch {epoch:2.0f} | Train acc: {train_acc[-1] * 100:3.2f} | Val acc {validation_acc[-1] * 100:3.2f} | "
               f"Train loss: {train_loss[-1]:1.3f} | Val loss: {validation_loss[-1]:1.3f} | Time passed: {(time.time_ns() - time_start) * 1E-9:3.2f} s")
 
         # Early stopping
@@ -109,7 +109,7 @@ def train(model, train_loader, valid_loader, device,
 
         if wait > patience:
             print(f'Early stopped. Best epoch {best_epoch} | Val accuracy {validation_acc[best_epoch] * 100:3.2f} | '
-                  f'Time passed: {(time.time_ns() - time_start) * 1E9:3.2f} s')
+                  f'Time passed: {(time.time_ns() - time_start) * 1E-9:4.2f} s')
             break
 
     return best_model, best_epoch, train_loss, train_acc, validation_loss, validation_acc
