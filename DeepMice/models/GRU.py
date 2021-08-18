@@ -1,3 +1,6 @@
+
+import copy
+import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -24,6 +27,7 @@ class GRU(nn.Module):
         self.n_images = 8 + 1
 
         # Define layers
+
         self.encoder_layer = nn.Linear(in_features=self.n_neurons*self.n_timestamps,
                              out_features=self.x_feat_length,
                              bias=True)
@@ -66,11 +70,24 @@ class GRU(nn.Module):
 
 def train(model, train_loader, valid_loader, device,
           learn_rate, n_epochs, patience,
+          freeze=False, path_to_model_state_dict=None,
           criterion=nn.CrossEntropyLoss(), optimizer=torch.optim.Adam):
 
     model.to(device)
-    # Assign optimizer parameters
-    optimizer = optimizer(model.parameters(), lr=learn_rate)
+    # Assign optimizer
+    if freeze:
+        # Set only encoder_layer to be optimised
+        optimizer = optimizer(model.encoder_layer.parameters(), lr=learn_rate)
+        # Load trained model parameters to new model (except for encoder layer)
+        trained_state_dict = torch.load(path_to_model_state_dict)
+        transfer_state_dict = model.state_dict()
+        for name, param in trained_state_dict.items():
+            if "encoder" not in name:
+                param = param.data
+                transfer_state_dict[name].copy_(param)
+    else:
+        # Set all layers to be optimised
+        optimizer = optimizer(model.parameters(), lr=learn_rate)
 
     # Allocate loss and accuracy data
     train_loss, validation_loss = [], []
@@ -181,15 +198,7 @@ def test(model, device, test_loader):
     return accuracy
 
 
-if __name__ == "__main__":
-    # Paths
-    session_number = 20
-    path_to_data_folder = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/')
-    path_to_session_file = list(path_to_data_folder.glob(f'*{session_number}_*.nc'))[0]
-    # ex_path = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/020_excSession_v1_ophys_858863712.nc')    # example file
-    # ex_path = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/018_excSession_v1_ophys_856295914.nc')
-
-    # Load data
+def quick_and_dirty_dataloader(path_to_session_file):
     data_interface = DataInterface(path=path_to_session_file)
     dataset_train = SequentialDataset(data_interface, part='train', len_sequence=15)
     dataset_val = SequentialDataset(data_interface, part='val', len_sequence=15,)
@@ -200,7 +209,6 @@ if __name__ == "__main__":
     g_seed = torch.Generator()
     g_seed.manual_seed(SEED)
     set_seed(seed=SEED)
-    DEVICE = set_device()
 
     train_loader = DataLoader(dataset_train, batch_size=5, shuffle=True,
                               worker_init_fn=seed_worker, generator=g_seed)
@@ -215,26 +223,67 @@ if __name__ == "__main__":
     # print(X_b.shape,    # Neural activity (batch_size, len_sequence, nr_neurons, time)
     #       y_b.shape,    # Shown images    (batch_size, len_sequence)
     #       init_b.shape) # Initial image   (batch_size, 1)
+    return X_b, train_loader, val_loader, test_loader
+
+
+if __name__ == "__main__":
+    # Paths
+    session_number = 20
+    path_to_data_folder = Path('/Users/mc/PycharmProjects/DeepMice/DeepMice/data/')
+    path_to_session_file_train = list(path_to_data_folder.glob(f'*{session_number}_*.nc'))[0]
+    path_to_session_file_transfer = list(path_to_data_folder.glob(f'*030_*.nc'))[0]
+
+    now = datetime.datetime.now().strftime("%H%M%S")
+    path_to_model_state_dict = Path(f'/Users/mc/PycharmProjects/DeepMice/DeepMice/models/GRU.pt')
+
+    DEVICE = set_device()
+    # ################################################
+    # Initial training
+    # ################################################
+    # Load data
+    X_b, train_loader, val_loader, test_loader = quick_and_dirty_dataloader(path_to_session_file_train)
 
     # Initialize model
     model = GRU(example_batch_X=X_b)
 
     # Train and validate model
-    best_model, best_epoch, train_loss, train_acc, validation_loss, validation_acc = train(
+    train_model, best_epoch, train_loss, train_acc, validation_loss, validation_acc = train(
         model=model,
         train_loader=train_loader,
         valid_loader=val_loader,
         device=DEVICE,
-        learn_rate=1e-3, n_epochs=50, patience=5,
+        learn_rate=1e-3, n_epochs=1, patience=5,
+        freeze=False,
         criterion=nn.CrossEntropyLoss(),
         optimizer=torch.optim.Adam
     )
 
-    # Save the model
-    # TODO: save the model later
-
     # Test model
-    accuracy = test(model=model,
+    accuracy = test(model=train_model,
                     test_loader=test_loader,
                     device=DEVICE)
+
+    # Save the model parameters
+    torch.save(train_model.state_dict(), path_to_model_state_dict)
+
+    # ################################################
+    # Transfer training
+    # ################################################
+    # Load data
+    X_b, train_loader, val_loader, test_loader = quick_and_dirty_dataloader(path_to_session_file_transfer)
+
+    # Initialize model
+    transfer_model = GRU(example_batch_X=X_b)
+
+    # Train and validate model
+    best_transfer_model, best_epoch, train_loss, train_acc, validation_loss, validation_acc = train(
+        model=transfer_model,
+        train_loader=train_loader,
+        valid_loader=val_loader,
+        device=DEVICE,
+        learn_rate=1e-3, n_epochs=2, patience=5,
+        freeze=True, path_to_model_state_dict=path_to_model_state_dict,
+        criterion=nn.CrossEntropyLoss(),
+        optimizer=torch.optim.Adam
+    )
 

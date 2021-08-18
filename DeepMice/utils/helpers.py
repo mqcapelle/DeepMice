@@ -27,9 +27,9 @@ def seed_worker(worker_id):
 def set_device():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device != "cuda":
-        print("GPU is not enabled in this notebook")
+        print("GPU is not enabled.")
     else:
-        print("GPU is enabled in this notebook")
+        print("GPU is enabled.")
 
     return device
 
